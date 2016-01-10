@@ -15,6 +15,9 @@ namespace Root_VSIX
         [Option("vsixPath", Required = true, HelpText = "The path to the VSIX file to install.")]
         public string VSIXPath { get; set; }
 
+        [Option("uninstallBeforeInstalling", Required = false, HelpText = "Uninstall an existing installed VSIX before installing.")]
+        public bool RemoveBeforeInstalling { get; set; }
+
         [ParserState]
         public IParserState LastParserState { get; set; }
 

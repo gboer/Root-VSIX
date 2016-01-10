@@ -47,17 +47,35 @@ namespace Root_VSIX
                 return PrintError("Cannot find VSIX file " + programOptions.VSIXPath);
             }
 
-            var vsix = ExtensionManagerService.CreateInstallableExtension(programOptions.VSIXPath);
-
-            Console.WriteLine("Installing " + vsix.Header.Name + " version " + vsix.Header.Version + " to Visual Studio " + programOptions.VisualStudioVersion + " /RootSuffix " + programOptions.RootSuffix);
-
+            ExternalSettingsManager externalSettingsManager = null;
             try
             {
-                Install(vsExe, vsix, programOptions.RootSuffix);
+                externalSettingsManager = ExternalSettingsManager.CreateForApplication(vsExe, programOptions.RootSuffix);
+
+                var extensionManager = new ExtensionManager(externalSettingsManager);
+
+                var vsix = ExtensionManagerService.CreateInstallableExtension(programOptions.VSIXPath);
+
+                Console.WriteLine("Installing " + vsix.Header.Name + " version " + vsix.Header.Version + " to Visual Studio " + programOptions.VisualStudioVersion + " /RootSuffix " + programOptions.RootSuffix);
+
+                if (programOptions.RemoveBeforeInstalling &&
+                    extensionManager.IsExtensionInstalled(vsix))
+                {
+                    extensionManager.UninstallExtension(extensionManager.GetInstalledExtension(vsix.Header.Identifier));
+                }
+
+                extensionManager.InstallExtension(vsix);
             }
             catch (Exception ex)
             {
                 return PrintError("Error: " + ex.Message);
+            }
+            finally
+            {
+                if (externalSettingsManager != null)
+                {
+                    externalSettingsManager.Dispose();
+                }
             }
 
             return 0;
@@ -83,15 +101,6 @@ namespace Root_VSIX
         public static string GetVersionExe(string version)
         {
             return Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\" + version + @"\Setup\VS", "EnvironmentPath", null) as string;
-        }
-
-        public static void Install(string vsExe, IInstallableExtension vsix, string rootSuffix)
-        {
-            using (var esm = ExternalSettingsManager.CreateForApplication(vsExe, rootSuffix))
-            {
-                var ems = new ExtensionManagerService(esm);
-                ems.Install(vsix, perMachine: false);
-            }
         }
 
         #region Output Messages
