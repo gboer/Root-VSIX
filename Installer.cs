@@ -102,39 +102,26 @@ namespace Root_VSIX
             using (var software = Registry.LocalMachine.OpenSubKey("SOFTWARE"))
             using (var ms = software.OpenSubKey("Microsoft"))
             using (var vs = ms.OpenSubKey("VisualStudio"))
+            {
                 return vs.GetSubKeyNames()
-                        .Select(s =>
-                {
-                    decimal v;
-                    if (!decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out v))
-                        return new decimal?();
-                    return v;
-                })
-                .Where(d => d.HasValue)
-                .OrderBy(d => d);
+                         .Select(subKeyName =>
+                                 {
+                                     decimal possibleVersion;
+                                     if (!decimal.TryParse(subKeyName, NumberStyles.Number, CultureInfo.InvariantCulture, out possibleVersion))
+                                     {
+                                         return new decimal?();
+                                     }
+
+                                     return possibleVersion;
+                                 })
+                         .Where(d => d.HasValue)
+                         .OrderBy(d => d);
+            }
         }
 
         public static string GetVersionExe(string version)
         {
             return Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\" + version + @"\Setup\VS", "EnvironmentPath", null) as string;
-        }
-
-        public static void InstallIntoCustomRoot(string vsExe, IInstallableExtension vsix, string rootSuffix)
-        {
-            Install(vsix, () => ExternalSettingsManager.CreateForApplication(vsExe, rootSuffix));
-        }
-
-        public static void InstallIntoDefaultRoot(string vsExe, IInstallableExtension vsix)
-        {
-            Install(vsix, () => ExternalSettingsManager.CreateForApplication(vsExe));
-        }
-
-        public static void Install(IInstallableExtension vsix, Func<ExternalSettingsManager> GetExternalSettingsManager)
-        {
-            using (var externalSettingsManager = GetExternalSettingsManager())
-            {
-                (new ExtensionManagerService(externalSettingsManager)).Install(vsix, perMachine: false);
-            }
         }
 
         #region Output Messages
