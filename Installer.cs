@@ -1,11 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using Microsoft.VisualStudio.ExtensionManager;
+﻿using Microsoft.VisualStudio.ExtensionManager;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 
 namespace Root_VSIX
 {
@@ -47,38 +47,54 @@ namespace Root_VSIX
                 return PrintError("Cannot find VSIX file " + programOptions.VSIXPath);
             }
 
-            ExternalSettingsManager externalSettingsManager = null;
             try
             {
-                externalSettingsManager = ExternalSettingsManager.CreateForApplication(vsExe, programOptions.RootSuffix);
-
-                var extensionManager = new ExtensionManager(externalSettingsManager);
-
-                var vsix = ExtensionManagerService.CreateInstallableExtension(programOptions.VSIXPath);
-
-                Console.WriteLine("Installing " + vsix.Header.Name + " version " + vsix.Header.Version + " to Visual Studio " + programOptions.VisualStudioVersion + " /RootSuffix " + programOptions.RootSuffix);
-
-                if (programOptions.RemoveBeforeInstalling &&
-                    extensionManager.IsExtensionInstalled(vsix))
+                using (var externalSettingsManager = GetExternalSettingsManager(programOptions.RootSuffix, vsExe))
                 {
-                    extensionManager.UninstallExtension(extensionManager.GetInstalledExtension(vsix.Header.Identifier));
-                }
+                    var extensionManager = new ExtensionManager(externalSettingsManager);
+                    var vsix             = ExtensionManagerService.CreateInstallableExtension(programOptions.VSIXPath);
 
-                extensionManager.InstallExtension(vsix);
+                    if (programOptions.RemoveBeforeInstalling &&
+                        extensionManager.IsExtensionInstalled(vsix))
+                    {
+                        Console.WriteLine(String.Format("Uninstalling existing extension '{0}' version {1}", vsix.Header.Name, vsix.Header.Version));
+                        extensionManager.UninstallExtension(extensionManager.GetInstalledExtension(vsix.Header.Identifier));
+                    }
+
+                    PrintInstallingExtensionMessage(programOptions, vsix);
+                    extensionManager.InstallExtension(vsix);
+                }
             }
             catch (Exception ex)
             {
                 return PrintError("Error: " + ex.Message);
             }
-            finally
-            {
-                if (externalSettingsManager != null)
-                {
-                    externalSettingsManager.Dispose();
-                }
-            }
 
             return 0;
+        }
+
+        private static void PrintInstallingExtensionMessage(ProgramOptions programOptions, IInstallableExtension vsix)
+        {
+            if (String.IsNullOrEmpty(programOptions.RootSuffix))
+            {
+                Console.WriteLine(String.Format("Installing '{0}' version {1} to Visual Studio {2}", vsix.Header.Name, vsix.Header.Version, programOptions.VisualStudioVersion));
+            }
+            else
+            {
+                Console.WriteLine(String.Format("Installing '{0}' version {1} to Visual Studio {2} /rootSuffix {3}", vsix.Header.Name, vsix.Header.Version, programOptions.VisualStudioVersion, programOptions.RootSuffix));
+            }
+        }
+
+        private static ExternalSettingsManager GetExternalSettingsManager(string rootSuffix, string vsExe)
+        {
+            if (!String.IsNullOrEmpty(rootSuffix))
+            {
+                return ExternalSettingsManager.CreateForApplication(vsExe, rootSuffix);
+            }
+            else
+            {
+                return ExternalSettingsManager.CreateForApplication(vsExe);
+            }
         }
 
         public static IEnumerable<decimal?> FindVsVersions()
@@ -101,6 +117,24 @@ namespace Root_VSIX
         public static string GetVersionExe(string version)
         {
             return Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\" + version + @"\Setup\VS", "EnvironmentPath", null) as string;
+        }
+
+        public static void InstallIntoCustomRoot(string vsExe, IInstallableExtension vsix, string rootSuffix)
+        {
+            Install(vsix, () => ExternalSettingsManager.CreateForApplication(vsExe, rootSuffix));
+        }
+
+        public static void InstallIntoDefaultRoot(string vsExe, IInstallableExtension vsix)
+        {
+            Install(vsix, () => ExternalSettingsManager.CreateForApplication(vsExe));
+        }
+
+        public static void Install(IInstallableExtension vsix, Func<ExternalSettingsManager> GetExternalSettingsManager)
+        {
+            using (var externalSettingsManager = GetExternalSettingsManager())
+            {
+                (new ExtensionManagerService(externalSettingsManager)).Install(vsix, perMachine: false);
+            }
         }
 
         #region Output Messages
